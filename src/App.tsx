@@ -15,18 +15,19 @@ import { Amplify } from "aws-amplify";
 import { generateClient } from "aws-amplify/data";
 import { getUrl, uploadData } from "aws-amplify/storage";
 import { useEffect, useState } from "react";
+import { Schema } from "../amplify/data/resource";
 import outputs from "../amplify_outputs.json";
 /**
  * @type {import('aws-amplify/data').Client<import('../amplify/data/resource').Schema>}
  */
 
 Amplify.configure(outputs);
-const client = generateClient({
+const client = generateClient<Schema>({
   authMode: "userPool",
 });
 
 export default function App() {
-  const [notes, setNotes] = useState([]);
+  const [notes, setNotes] = useState<Schema["Note"]["type"][]>([]);
 
   useEffect(() => {
     fetchNotes();
@@ -41,7 +42,7 @@ export default function App() {
             path: ({ identityId }) => `media/${identityId}/${note.image}`,
           });
           console.log(linkToStorageFile.url);
-          note.image = linkToStorageFile.url;
+          note.image = linkToStorageFile.url.toString();
         }
         return note;
       })
@@ -50,31 +51,40 @@ export default function App() {
     setNotes(notes);
   }
 
-  async function createNote(event) {
+  interface NoteFormElements extends HTMLFormControlsCollection {
+    name: HTMLInputElement;
+    description: HTMLInputElement;
+    image: HTMLInputElement;
+  }
+
+  interface NoteForm extends HTMLFormElement {
+    readonly elements: NoteFormElements;
+  }
+
+  async function createNote(event: React.FormEvent<NoteForm>) {
     event.preventDefault();
-    const form = new FormData(event.target);
-    console.log(form.get("image").name);
+    const form = new FormData(event.currentTarget);
+    console.log((form.get("image") as File).name);
 
     const { data: newNote } = await client.models.Note.create({
-      name: form.get("name"),
-      description: form.get("description"),
-      image: form.get("image").name,
+      name: form.get("name") as string,
+      description: form.get("description") as string,
+      image: (form.get("image") as File).name,
     });
 
     console.log(newNote);
-    if (newNote.image)
-      if (newNote.image)
-        await uploadData({
-          path: ({ identityId }) => `media/${identityId}/${newNote.image}`,
-
-          data: form.get("image"),
-        }).result;
+    if (newNote?.image) {
+      await uploadData({
+        path: ({ identityId }) => `media/${identityId}/${newNote.image}`,
+        data: form.get("image") as File,
+      }).result;
+    }
 
     fetchNotes();
-    event.target.reset();
+    event.currentTarget.reset();
   }
 
-  async function deleteNote({ id }) {
+  async function deleteNote({ id }: { id: string }) {
     const toBeDeletedNote = {
       id: id,
     };
@@ -157,13 +167,13 @@ export default function App() {
                 className="box"
               >
                 <View>
-                  <Heading level="3">{note.name}</Heading>
+                  <Heading level={3}>{note.name}</Heading>
                 </View>
                 <Text fontStyle="italic">{note.description}</Text>
                 {note.image && (
                   <Image
                     src={note.image}
-                    alt={`visual aid for ${notes.name}`}
+                    alt={`visual aid for ${note.name}`}
                     style={{ width: 400 }}
                   />
                 )}
